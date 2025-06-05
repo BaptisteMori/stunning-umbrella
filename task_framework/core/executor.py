@@ -10,8 +10,8 @@ class TaskExecutor:
     with optional parameter passing.
     """
     
-    def __init__(self, registry: TaskRegistry|None = None):
-        self.registry = registry or TaskRegistry()
+    def __init__(self, registry: TaskRegistry):
+        self.registry = registry
     
     def execute_task(self, task_name: str, params: dict[str, any]|None = None):
         """

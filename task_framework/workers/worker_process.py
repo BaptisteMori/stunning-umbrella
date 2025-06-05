@@ -6,7 +6,7 @@ import signal
 import logging
 import threading
 
-from ..workers.worker import TaskWorker
+from .task_worker import TaskWorker
 from ..queue.redis_queue import RedisTaskQueue
 from ..core.registry import TaskRegistry
 

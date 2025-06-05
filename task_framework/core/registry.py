@@ -1,10 +1,9 @@
-import re
 import importlib
 import inspect
 import logging
 from pathlib import Path
 
-from .base import Task
+from .task import Task
 from utils.string_parsing import string_match_pattern
 
 
@@ -18,7 +17,6 @@ class TaskRegistry:
     listing task classes that inherit from a base Task class.
     """
 
-    
     def __init__(self):
         self.tasks: dict[str, type[Task]] = {}
     

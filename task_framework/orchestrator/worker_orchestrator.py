@@ -5,42 +5,36 @@ import threading
 import subprocess
 from typing import Dict, Optional
 from dataclasses import dataclass
-from enum import Enum
-import psutil
+
+from workers.worker import WorkerStatus
 from ..queue.redis_queue import RedisTaskQueue
 from ..core.registry import TaskRegistry
 from ..monitoring.prometheus_metrics import PrometheusMonitoring
 from ..monitoring.metrics_collector import MetricsCollector
 
-class WorkerStatus(Enum):
-    STARTING = "starting"
-    RUNNING = "running"
-    STOPPING = "stopping"
-    STOPPED = "stopped"
-    FAILED = "failed"
 
 @dataclass
 class WorkerInfo:
     """Informations sur un worker"""
     worker_id: str
-    pid: Optional[int] = None
+    pid: int|None = None
     status: WorkerStatus = WorkerStatus.STARTING
-    start_time: Optional[float] = None
+    start_time: float|None = None
     restart_count: int = 0
-    last_heartbeat: Optional[float] = None
-    process: Optional[subprocess.Popen] = None
+    last_heartbeat: float|None = None
+    process: subprocess.Popen|None = None
 
 class WorkerOrchestrator:
     """Orchestrateur de workers avec monitoring Prometheus"""
     
     def __init__(self, 
                  queue: RedisTaskQueue,
-                 registry: Optional[TaskRegistry] = None,
+                 registry: TaskRegistry|None = None,
                  num_workers: int = 4,
                  max_restarts: int = 5,
                  worker_timeout: int = 30,
                  health_check_interval: int = 5,
-                 worker_script: Optional[str] = None,
+                 worker_script: str|None = None,
                  enable_monitoring: bool = True,
                  monitoring_port: int = 8000):
         
@@ -52,7 +46,7 @@ class WorkerOrchestrator:
         self.health_check_interval = health_check_interval
         self.worker_script = worker_script
         
-        self.workers: Dict[str, WorkerInfo] = {}
+        self.workers: dict[str, WorkerInfo] = {}
         self.running = False
         self.orchestrator_thread = None
         self.health_check_thread = None
@@ -265,7 +259,7 @@ class WorkerOrchestrator:
                     print(f"Worker {worker_id} ne répond plus (timeout)")
                     self._restart_worker(worker_id)
     
-    def get_worker_stats(self) -> Dict[str, Dict]:
+    def get_worker_stats(self) -> dict[str, dict]:
         """Retourne les statistiques des workers"""
         stats = {}
         for worker_id, worker in self.workers.items():

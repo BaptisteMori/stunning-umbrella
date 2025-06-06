@@ -1,5 +1,6 @@
-from .task_worker import TaskWorker
-from .worker_process import DefaultWorkerProcess
+from workers.task_worker import TaskWorker
+from workers.worker import Worker
 
-__all__ = ["TaskWorker", "DefaultWorkerProcess"]
+
+__all__ = ["TaskWorker", "Worker"]
 

@@ -10,8 +10,7 @@ __all__ = [
     "Task",
     "TaskExecutor", 
     "TaskRegistry",
-    "RedisTaskQueue",
-    "RabbitMQTaskQueue", 
+    "RedisTaskQueue", 
     "TaskMessage",
     "TaskWorker"
 ]

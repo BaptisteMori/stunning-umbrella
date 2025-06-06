@@ -1,6 +1,8 @@
+import time
 import redis
-from .models import TaskMessage
-from .queue import TaskQueue
+
+from queue.models import TaskMessage
+from queue.queue import TaskQueue
 
 
 class RedisTaskQueue(TaskQueue):
@@ -12,9 +14,31 @@ class RedisTaskQueue(TaskQueue):
     task processing.
     """
     
-    def __init__(self, redis_url: str = "redis://localhost:6379", queue_name: str = "tasks"):
-        self.redis_client = redis.from_url(redis_url)
-        self.queue_name = queue_name
+    def __init__(self, redis_url: str = "redis://localhost:6379", 
+                 queue_name: str = "tasks", 
+                 max_retries: int = 3):
+        super().__init__(queue_name)
+        self.redis_url = redis_url
+        self.max_retries = max_retries
+        self._connect()
+    
+    def _connect(self):
+        """Establish Redis connection with retry logic."""
+        for attempt in range(self.max_retries):
+            try:
+                self.redis_client = redis.from_url(
+                    self.redis_url,
+                    decode_responses=True,
+                    socket_connect_timeout=5,
+                    socket_timeout=5
+                )
+                self.redis_client.ping()
+                return
+            except redis.ConnectionError as e:
+                if attempt < self.max_retries - 1:
+                    time.sleep(2 ** attempt)  # Exponential backoff
+                else:
+                    raise ConnectionError(f"Failed to connect to Redis: {e}")
     
     def enqueue(self, task_name: str, params: dict[str, any], priority: int = 0) -> str:
         """
@@ -63,5 +87,22 @@ class RedisTaskQueue(TaskQueue):
         
         if result:
             _, message_json = result
-            return TaskMessage.from_json(message_json.decode())
+            # message_json est déjà une string si decode_responses=True
+            return TaskMessage.from_json(message_json)
+        return None
+    
+    def peek(self) -> TaskMessage|None:
+        """
+        Examine the next task without removing it from queue.
+        
+        Returns:
+            TaskMessage|None: Next task if available, None otherwise
+        """
+        # Check high priority queue first
+        result = self.redis_client.lindex(f"{self.queue_name}:high", -1)
+        if not result:
+            result = self.redis_client.lindex(self.queue_name, -1)
+        
+        if result:
+            return TaskMessage.from_json(result)
         return None

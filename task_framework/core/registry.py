@@ -3,11 +3,12 @@ import inspect
 import logging
 from pathlib import Path
 
-from .task import Task
-from utils.string_parsing import string_match_pattern
+from core.task import Task
+from utils.string_parsing import string_matches_any_pattern
 
 
 LOGGER: logging.Logger = logging.getLogger(__name__)
+
 
 class TaskRegistry:
     """
@@ -62,7 +63,7 @@ class TaskRegistry:
         return self.tasks.copy()
     
 
-def discover_tasks(tasks_path: str|Path, except_patterns: list[str] = [r"__.*", r"base.py"]):
+def discover_tasks(tasks_path: str|Path, except_patterns: list[str] = [r"__.*", r"base.py"]) -> dict[str, Task]:
     """
     Automatically discover and load task classes from a specified directory.
     
@@ -85,10 +86,9 @@ def discover_tasks(tasks_path: str|Path, except_patterns: list[str] = [r"__.*", 
     Note:
         - Task names are derived from class names by removing "Task" suffix and 
           converting to lowercase
-        - If removing "Task" results in empty string, uses full class name in lowercase
         - Import errors are logged but don't stop the discovery process
     """
-    available_tasks: dict[str: Task] = {}
+    available_tasks: dict[str, type[Task]] = {}
 
     if type(tasks_path) == str:
         tasks_path = Path(tasks_path)
@@ -97,13 +97,14 @@ def discover_tasks(tasks_path: str|Path, except_patterns: list[str] = [r"__.*", 
         raise FileNotFoundError(tasks_path)
     
     for file_path in tasks_path.glob("*.py"):
-        if string_match_pattern(name, except_patterns):
+        if string_matches_any_pattern(file_path.name, except_patterns):
             continue
 
         module_name = file_path.stem
         try:
-            # Import module dynamicaly
-            module = importlib.import_module(f"{tasks_path}.{module_name}")
+            # Import module dynamically
+            module_path = str(tasks_path).replace('/', '.').replace('\\', '.')
+            module = importlib.import_module(f"{module_path}.{module_name}")
             
             # Search each class that inherits from Task
             for name, obj in inspect.getmembers(module, inspect.isclass):
@@ -111,15 +112,10 @@ def discover_tasks(tasks_path: str|Path, except_patterns: list[str] = [r"__.*", 
                     obj != Task and 
                     obj.__module__ == module.__name__):
                     
-                    # Use the name of the classe as identifier without the "Task"
-                    task_name = name.replace("Task", "").lower()
-                    if not task_name:
-                        task_name = name.lower()
-                    
-                    available_tasks[task_name] = obj
-                    LOGGER.debug(f"Task found: {task_name} -> {name}")
+                    available_tasks[name] = obj
+                    LOGGER.debug(f"Task found: {name}")
         
         except ImportError as e:
-            LOGGER.error(e, exc_info=True)
-            LOGGER.error("Error during the import of %s", module_name)
+            LOGGER.exception("Error during the import of %s", module_name)
             
+    return available_tasks

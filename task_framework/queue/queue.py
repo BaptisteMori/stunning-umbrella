@@ -1,4 +1,4 @@
-from .models import TaskMessage
+from queue.models import TaskMessage
 
 
 class TaskQueue:
@@ -40,7 +40,7 @@ class TaskQueue:
         """
         raise NotImplementedError
 
-    def dequeue(self) -> TaskMessage:
+    def dequeue(self, timeout: int = 1) -> TaskMessage:
         """
         Remove and return the highest priority task from the queue.
         
@@ -49,6 +49,10 @@ class TaskQueue:
         the selection behavior depends on the concrete implementation
         (typically FIFO within priority levels).
         
+        Args:
+            timeout (int, optional): Maximum time to wait for a task in seconds.
+                                    Defaults to 1
+
         Returns:
             TaskMessage: Task message object containing all task details
                         including name, parameters, priority, and metadata

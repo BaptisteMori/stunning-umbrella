@@ -4,8 +4,7 @@ All it does is take a task and process it
 
 
 ## Description
-
-
+See docs/ for details information on [workers](docs/worker.md), [queues](docs/queue.md), [orchestrator](docs/orchestrator.md), [tasks](docs/task.md), [monitoring](docs/monitoring.md)
 
 
 ## Install

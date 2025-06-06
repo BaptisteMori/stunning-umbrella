@@ -1,4 +1,4 @@
-from .registry import TaskRegistry
+from core.registry import TaskRegistry
 
 
 class TaskExecutor:

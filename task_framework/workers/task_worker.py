@@ -1,10 +1,10 @@
-import signal
 import logging
 
 from workers.worker import WorkerStatus, Worker
-from ..core.executor import TaskExecutor
-from ..core.registry import TaskRegistry
-from ..queue.queue import TaskQueue
+from core.executor import TaskExecutor
+from core.registry import TaskRegistry
+from queue.queue import TaskQueue
+from queue.models import TaskMessage
 
 
 LOGGER: logging.Logger = logging.getLogger(__name__)
@@ -20,22 +20,7 @@ class TaskWorker(Worker):
 
         self.executor = TaskExecutor(self.registry)
         self.max_retries = max_retries
-        self.running = True
-        self.status: WorkerStatus = WorkerStatus.PENDING
-
-        # Graceful management of the stop
-        signal.signal(signal.SIGINT, self._shutdown)
-        signal.signal(signal.SIGTERM, self._shutdown)
-    
-    def _shutdown(self, signum, frame):
-        """Graceful shutdown handler"""
-        LOGGER.info(f"Shutdown of the worker (signal {signum})")
-        self._update_status(WorkerStatus.STOPPING)
-        self.running = False
-
-    def _update_status(self, status: WorkerStatus) -> None:
-        self.status = status
-    
+   
     def run(self):
         """Worker main loop"""
         LOGGER.info("Worker started, Waiting for a task...")
@@ -56,20 +41,22 @@ class TaskWorker(Worker):
         self._update_status(WorkerStatus.STOPPED)
         LOGGER.info("Worker stopped")
     
-    def _process_message(self, message):
-        """Process a message from the queue."""
+    def _process_message(self, message: TaskMessage):
+        """Process a message from the queue with proper retry handling."""
         try:
-            LOGGER.info(f"Process of the task: {message.task_name}")
+            LOGGER.info(f"Processing task: {message.task_name}")
             self.executor.execute_task(message.task_name, message.params)
-            LOGGER.info(f"Task {message.task_name} ended with success")
+            LOGGER.info(f"Task {message.task_name} completed successfully")
         
         except Exception as e:
-            LOGGER.error(f"Error during the execution of the task {message.task_name}: {e}")
+            LOGGER.error(f"Error executing task {message.task_name}: {e}")
             
-            # retry
-            if message.retry_count < self.max_retries:
+            # Use message.max_retries instead of worker's max_retries
+            if message.retry_count < message.max_retries:
                 message.retry_count += 1
-                LOGGER.info(f"Retry {message.retry_count}/{self.max_retries}")
-                self.queue.enqueue(message.task_name, message.params)
+                LOGGER.info(f"Retry {message.retry_count}/{message.max_retries}")
+                
+                # Re-enqueue the same message with updated retry count
+                self.queue.enqueue(message)  # New method needed
             else:
-                LOGGER.error(f"Task {message.task_name} definitively failed after {self.max_retries} retries")
+                LOGGER.error(f"Task {message.task_name} failed after {message.max_retries} retries")

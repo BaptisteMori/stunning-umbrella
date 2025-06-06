@@ -1,25 +1,27 @@
 import re
 
 
-def string_match_pattern(string: str, list_patterns: list[str]) -> bool:
+def string_matches_any_pattern(string: str, patterns: list[str]) -> bool:
     """
-    Validates that a string does not match any forbidden patterns.
+    Check if string matches any of the provided regex patterns.
     
     Args:
-        string: Input string to validate
-        list_patterns: List of regex patterns to check against
+        string: Input string to check
+        patterns: List of regex patterns
     
     Returns:
-        bool: True if string passes validation, False otherwise
-    
-    Raises:
-        ValueError: If inputs are invalid
-        re.error: If regex patterns are malformed
+        bool: True if string matches any pattern, False otherwise
     """
-    if not isinstance(string, str) or not isinstance(list_patterns, list):
-        raise ValueError(f"Invalid input types")
+    if not isinstance(string, str):
+        raise ValueError(f"Expected string, got {type(string).__name__}")
+    if not isinstance(patterns, list):
+        raise ValueError(f"Expected list of patterns, got {type(patterns).__name__}")
     
-    for pattern in list_patterns:
-        if re.search(pattern, string):
-            return False
-    return True
+    for pattern in patterns:
+        try:
+            if re.search(pattern, string):
+                return True
+        except re.error as e:
+            raise ValueError(f"Invalid regex pattern '{pattern}': {e}")
+    
+    return False

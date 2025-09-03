@@ -1,4 +1,5 @@
 from queue.models import TaskMessage
+from queue.priorities import TaskPriority
 
 
 class TaskQueue:
@@ -12,10 +13,25 @@ class TaskQueue:
     Attributes:
         queue_name (str): Unique identifier for the task queue instance
     """
-    def __init__(self, queue_name: str):
-        self.queue_name = queue_name
+    def __init__(self, queue_name: str, priorities: TaskPriority = TaskPriority):
+        self.queue_name: str = queue_name
+        self.priorities: TaskPriority = priorities
 
-    def enqueue(self, task_name: str, params: dict[str, any], priority: int = 0) -> str:
+    @classmethod
+    def _get_sorted_priorities(self) -> list[TaskPriority]:
+        """
+        Returns the task priorities sorted in descending order of their values.
+
+        This is useful when tasks should be processed starting from the highest 
+        priority (e.g., CRITICAL) down to the lowest (e.g., IDLE).
+
+        Returns:
+            List[TaskPriority]: A list of TaskPriority members sorted from 
+                                highest to lowest priority.
+        """
+        return sorted(self.priorities, key=lambda p: p.value, reverse=True)
+
+    def enqueue(self, task_name: str, params: dict[str, any] = {}, priority: int = 0) -> str:
         """
         Add a new task to the queue with specified parameters and priority.
         
@@ -82,3 +98,15 @@ class TaskQueue:
         """
         raise NotImplementedError
     
+    def get_queue_size(self) -> dict[str, int]:
+        """
+        Get the stats of the queue, the total number of messages in the queue and per priorities.
+
+        Returns:
+            dict[str, int]: Dictionnary of stats
+        
+        Raises:
+            NotImplementedError: This is an abstract method that must be implemented
+                               by concrete subclasses
+        """
+        raise NotImplementedError

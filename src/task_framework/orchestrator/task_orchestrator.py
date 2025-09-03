@@ -82,8 +82,8 @@ class TaskOrchestrator:
         """
         if worker_count < 1:
             raise ValueError("Worker count must be at least 1")
-        
-        if not isinstance(worker_class, Worker):
+
+        if not issubclass(worker_class, Worker):
             raise ValueError("worker_class must be a subclass of Worker")
 
         self.worker_count: int = worker_count

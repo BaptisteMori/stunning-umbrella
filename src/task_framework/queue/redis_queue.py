@@ -1,6 +1,7 @@
 import time
 import redis
 
+from queue.priorities import TaskPriority
 from queue.models import TaskMessage
 from queue.queue import TaskQueue
 
@@ -16,12 +17,18 @@ class RedisTaskQueue(TaskQueue):
     
     def __init__(self, redis_url: str = "redis://localhost:6379", 
                  queue_name: str = "tasks", 
-                 max_retries: int = 3):
-        super().__init__(queue_name)
-        self.redis_url = redis_url
-        self.max_retries = max_retries
+                 max_retries: int = 3,
+                 priorities: TaskPriority = TaskPriority):
+        super().__init__(
+            queue_name, 
+            priorities=priorities
+        )
+
+        self.redis_url: str = redis_url
+        self.max_retries: int = max_retries
+        
         self._connect()
-    
+
     def _connect(self):
         """Establish Redis connection with retry logic."""
         for attempt in range(self.max_retries):
@@ -40,7 +47,11 @@ class RedisTaskQueue(TaskQueue):
                 else:
                     raise ConnectionError(f"Failed to connect to Redis: {e}")
     
-    def enqueue(self, task_name: str, params: dict[str, any], priority: int = 0) -> str:
+    def _get_queue_key(self, priority: int) -> str:
+        """Generate Redis key for a specific priority queue."""
+        return f"{self.queue_name}:priority:{priority}"
+
+    def enqueue(self, task_name: str, params: dict[str, any]= {}, priority: int = 0) -> str:
         """
         Add a task to the appropriate queue based on priority.
         
@@ -80,11 +91,12 @@ class RedisTaskQueue(TaskQueue):
             TaskMessage|None: The next available task message, or None if timeout expires
                              without finding any tasks.
         """
-        # First verify the priority queue
-        result = self.redis_client.brpop(f"{self.queue_name}:high", timeout=0.1)
-        if not result:
-            result = self.redis_client.brpop(self.queue_name, timeout=timeout)
         
+        for priority in self._get_sorted_priorities():
+            result = self.redis_client.brpop(self._get_queue_key(priority.value))
+            if result:
+                break
+
         if result:
             _, message_json = result
             # message_json est déjà une string si decode_responses=True

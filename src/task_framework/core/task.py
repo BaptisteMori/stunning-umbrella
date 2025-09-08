@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 import logging
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel, ValidationError, ConfigDict
 from enum import Enum
 
 
@@ -19,12 +19,8 @@ class TaskParams(BaseModel):
     This class serves as a foundation for parameter validation in task implementations.
     It allows additional fields beyond those explicitly defined, providing flexibility
     for different task types while maintaining validation capabilities.
-    
-    Configuration:
-        extra: Allows additional fields not defined in the model schema
     """
-    class Config:
-        extra = "allow"  # Allow extra fields
+    model_config = ConfigDict(extra="allow")  # Allow extra fields
 
 
 class Task(ABC):
@@ -39,6 +35,7 @@ class Task(ABC):
         params_model (type|None): Optional Pydantic model class for parameter validation
         params (dict): Dictionary containing task parameters
         logger (logging.Logger): Logger instance for the task class
+        status (TaskStatus): Current status of the task
     
     Example:
         >>> class MyTask(Task):
@@ -47,12 +44,13 @@ class Task(ABC):
         >>> task = MyTask({"key": "value"})
         >>> task.run()
     """
-    # Validation model, to be surcharged
-    params_model: type|None = None
+    # Validation model, to be overridden
+    params_model: type[TaskParams] = None
     
-    def __init__(self, params: dict[str, any]|None = None):
+    def __init__(self, params: dict[str, any] = None):
         self.params = params or {}
         self.logger = logging.getLogger(self.__class__.__name__)
+        self.status = TaskStatus.PENDING
         self._validate_params()
     
     def _validate_params(self):
@@ -70,7 +68,7 @@ class Task(ABC):
         if self.params_model:
             try:
                 validated = self.params_model(**self.params)
-                self.params = validated.dict()
+                self.params = validated.model_dump()
             except ValidationError as e:
                 raise ValueError(f"Invalid parameters for {self.__class__.__name__}: {e}")
     
@@ -89,6 +87,29 @@ class Task(ABC):
             This is an abstract method that must be overridden in subclasses
         """
         pass
+    
+    def execute(self):
+        """
+        Execute the task with status tracking.
+        
+        This is a wrapper around the run() method that handles status updates
+        and error handling in a consistent way.
+        
+        Returns:
+            The result of task execution
+        """
+        self.logger.info(f"Starting execution of {self.__class__.__name__}")
+        self.status = TaskStatus.RUNNING
+        
+        try:
+            result = self.run()
+            self.status = TaskStatus.COMPLETED
+            self.logger.info(f"Successfully completed {self.__class__.__name__}")
+            return result
+        except Exception as e:
+            self.status = TaskStatus.FAILED
+            self.logger.error(f"Failed to execute {self.__class__.__name__}: {e}")
+            raise
     
     def get_required_params(self) -> list[str]:
         """

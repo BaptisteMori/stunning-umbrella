@@ -63,7 +63,7 @@ class TaskRegistry:
         return self.tasks.copy()
     
 
-def discover_tasks(tasks_path: str|Path, except_patterns: list[str] = [r"__.*", r"base.py"]) -> dict[str, Task]:
+def discover_tasks(tasks_path: Path, except_patterns: list[str] = [r"__.*", r"base.py"]) -> dict[str, Task]:
     """
     Automatically discover and load task classes from a specified directory.
     

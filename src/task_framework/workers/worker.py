@@ -3,7 +3,7 @@ import logging
 import signal
 
 from core.registry import TaskRegistry
-from queue.queue import TaskQueue
+from task_queue.task_queue import TaskQueue
 
 
 LOGGER: logging.Logger = logging.getLogger(__name__)

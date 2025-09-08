@@ -6,6 +6,10 @@ All it does is take a task and process it
 ## Description
 See docs/ for details information on [workers](docs/worker.md), [queues](docs/queue.md), [orchestrator](docs/orchestrator.md), [tasks](docs/task.md), [monitoring](docs/monitoring.md)
 
+Need 3 components:
+- a queue, either redis or custom ( if it's a custom one it might need a custom queue implementation)
+- worker(s), set the config and the task available to use, could be a worker or a orchestrator
+- the app that need a task worker
 
 ## Install
 ### Pip

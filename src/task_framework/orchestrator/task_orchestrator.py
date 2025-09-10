@@ -1,17 +1,16 @@
 import time
 import signal
-import logging
 import multiprocessing as mp
 from dataclasses import dataclass
 from enum import Enum
+from typing import Type, Optional
 
-from queue.queue import TaskQueue
-from core.registry import TaskRegistry
-from workers.worker import Worker
-from workers.task_worker import TaskWorker
-
-
-LOGGER = logging.getLogger(__name__)
+from task_framework.queue.queue import Queue
+from task_framework.core.registry import TaskRegistry
+from task_framework.workers.worker import Worker
+from task_framework.workers.task_worker import TaskWorker
+from task_framework.config.settings import TaskFrameworkConfig
+from task_framework.observability.metrics import metrics, StructuredLogger
 
 
 class ProcessStatus(Enum):
@@ -25,92 +24,79 @@ class ProcessStatus(Enum):
 
 @dataclass
 class WorkerProcess:
-    """
-    Container for worker process metadata and management.
-    
-    Tracks individual worker processes with their execution state,
-    process handle, and restart capabilities for fault tolerance.
-    
-    Attributes:
-        id (int): Unique identifier for the worker process
-        process (Optional[mp.Process]): Multiprocessing handle for the worker
-        status (ProcessStatus): Current execution state of the worker
-        restart_count (int): Number of times this worker has been restarted
-        max_restarts (int): Maximum allowed restarts before permanent failure
-    """
+    """Container for worker process metadata and management."""
     id: int
-    process: mp.Process|None = None
+    process: Optional[mp.Process] = None
     status: ProcessStatus = ProcessStatus.STARTING
     restart_count: int = 0
     max_restarts: int = 3
+    worker_id: str = ""
+    
+    def __post_init__(self):
+        if not self.worker_id:
+            self.worker_id = f"worker-{self.id}"
 
 
 class TaskOrchestrator:
     """
-    Multi-process task orchestrator for managing distributed worker execution.
+    Multi-process task orchestrator with configuration and observability.
     
     This orchestrator manages multiple worker processes that consume tasks from
-    a shared Redis queue, providing fault tolerance through automatic restart
+    a shared queue, providing fault tolerance through automatic restart
     and graceful shutdown capabilities.
-    
-    Attributes:
-        worker_count (int): Number of worker processes to maintain
-        queue (RedisTaskQueue): Shared task queue for worker communication
-        registry (TaskRegistry): Task registry containing available task implementations
-        workers (dict[int, WorkerProcess]): Active worker process tracking
-        running (bool): Orchestrator execution state flag
     """
     
     def __init__(self, 
-                 worker_count: int,
-                 queue: TaskQueue,
+                 queue: Queue,
                  registry: TaskRegistry,
-                 worker_class: Worker = TaskWorker,
-        ):
+                 config: TaskFrameworkConfig = None,
+                 worker_class: Type[Worker] = TaskWorker):
         """
-        Initialize orchestrator with worker configuration and task discovery.
+        Initialize orchestrator with configuration.
         
         Args:
-            worker_count (int): Number of worker processes to spawn and maintain
-            redis_url (str, optional): Redis connection string. Defaults to localhost
-            queue_name (str, optional): Queue identifier for task distribution
-            tasks_path (Optional[str], optional): Path for automatic task discovery
-        
-        Raises:
-            ValueError: If worker_count is less than 1
-            ConnectionError: If Redis connection cannot be established
+            queue: Task queue for worker communication
+            registry: Task registry containing available task implementations
+            config: Framework configuration (uses default if None)
+            worker_class: Worker class to instantiate
         """
-        if worker_count < 1:
+        self.config = config or TaskFrameworkConfig.from_env()
+        
+        if self.config.worker.count < 1:
             raise ValueError("Worker count must be at least 1")
 
         if not issubclass(worker_class, Worker):
             raise ValueError("worker_class must be a subclass of Worker")
 
-        self.worker_count: int = worker_count
-        self.queue: TaskQueue = queue
+        self.queue: Queue = queue
         self.registry: TaskRegistry = registry
-        self.worker_class: Worker = worker_class
+        self.worker_class: Type[Worker] = worker_class
         
         self.workers: dict[int, WorkerProcess] = {}
         self.running: bool = False
         
+        self.logger = StructuredLogger("orchestrator")
+        
+        self.config.setup_logging()
+        
         # Graceful shutdown signal handling
         signal.signal(signal.SIGINT, self._shutdown_handler)
         signal.signal(signal.SIGTERM, self._shutdown_handler)
+        
+        prod_issues = self.config.validate_production()
+        if prod_issues:
+            self.logger.warning("Production configuration issues found", issues=prod_issues)
     
     def _create_worker_process(self, worker_id: int) -> mp.Process:
-        """
-        Create a new worker process with isolated task execution environment.
-        
-        Args:
-            worker_id (int): Unique identifier for the worker process
-        
-        Returns:
-            mp.Process: Configured worker process ready for execution
-        """
+        """Create a new worker process with isolated task execution environment."""
         def worker_target():
-            # Initialize and run worker
-            worker: Worker = self.worker_class(self.queue, self.registry)
+            # Initialize and run worker with config
+            worker: Worker = self.worker_class(
+                self.queue, 
+                self.registry,
+                max_retries=self.config.worker.max_retries,
+                worker_id=f"worker-{worker_id}"
+            )
             worker.run()
         
         process: mp.Process = mp.Process(
@@ -120,24 +106,23 @@ class TaskOrchestrator:
         return process
     
     def _start_worker(self, worker_id: int) -> bool:
-        """
-        Start or restart a specific worker process.
-        
-        Args:
-            worker_id (int): Identifier of worker to start
-        
-        Returns:
-            bool: True if worker started successfully, False otherwise
-        """
+        """Start or restart a specific worker process."""
         if worker_id not in self.workers:
-            self.workers[worker_id] = WorkerProcess(id=worker_id)
+            self.workers[worker_id] = WorkerProcess(
+                id=worker_id,
+                max_restarts=self.config.worker.max_retries
+            )
         
         worker: WorkerProcess = self.workers[worker_id]
         
         # Check restart limits
         if worker.restart_count >= worker.max_restarts:
-            LOGGER.error(f"Worker {worker_id} exceeded max restarts ({worker.max_restarts})")
+            self.logger.error("Worker exceeded max restarts", 
+                            worker_id=worker.worker_id,
+                            max_restarts=worker.max_restarts)
             worker.status = ProcessStatus.FAILED
+            
+            metrics.increment_counter("worker_permanent_failures", {"worker_id": worker.worker_id})
             return False
         
         try:
@@ -152,21 +137,27 @@ class TaskOrchestrator:
             worker.status = ProcessStatus.RUNNING
             worker.restart_count += 1
             
-            LOGGER.info(f"Started worker {worker_id} (restart #{worker.restart_count})")
+            metrics.increment_counter("worker_starts", {"worker_id": worker.worker_id})
+            
+            self.logger.info("Started worker", 
+                           worker_id=worker.worker_id,
+                           restart_count=worker.restart_count,
+                           pid=worker.process.pid)
             return True
             
         except Exception as e:
-            LOGGER.exception("Failed to start worker: %s", worker_id)
+            self.logger.error("Failed to start worker", 
+                            worker_id=worker.worker_id,
+                            error=str(e))
             worker.status = ProcessStatus.FAILED
+            
+            metrics.increment_counter("worker_start_failures", {"worker_id": worker.worker_id})
             return False
     
     def _monitor_workers(self) -> None:
-        """
-        Monitor worker processes and restart failed workers automatically.
+        """Monitor worker processes and restart failed workers automatically."""
+        active_workers = 0
         
-        Performs health checks on all managed worker processes and initiates
-        restart procedures for any workers that have terminated unexpectedly.
-        """
         for worker_id, worker in list(self.workers.items()):
             if worker.process is None:
                 continue
@@ -176,37 +167,50 @@ class TaskOrchestrator:
                 exit_code = worker.process.exitcode
                 
                 if worker.status != ProcessStatus.STOPPING:
-                    LOGGER.warning(f"Worker {worker_id} died unexpectedly (exit code: {exit_code})")
+                    self.logger.warning("Worker died unexpectedly", 
+                                      worker_id=worker.worker_id,
+                                      exit_code=exit_code)
+                    
+                    metrics.increment_counter("worker_crashes", {"worker_id": worker.worker_id})
                     
                     # Attempt restart if within limits
                     if worker.restart_count < worker.max_restarts:
-                        LOGGER.info(f"Restarting worker {worker_id}")
-                        self._start_worker(worker_id)
+                        self.logger.info("Restarting worker", worker_id=worker.worker_id)
+                        if self._start_worker(worker_id):
+                            active_workers += 1
                     else:
                         worker.status = ProcessStatus.FAILED
-                        LOGGER.error(f"Worker {worker_id} permanently failed")
+                        self.logger.error("Worker permanently failed", worker_id=worker.worker_id)
                 else:
                     worker.status = ProcessStatus.STOPPED
-                    LOGGER.info(f"Worker {worker_id} stopped gracefully")
+                    self.logger.info("Worker stopped gracefully", worker_id=worker.worker_id)
+            else:
+                active_workers += 1
+        
+        metrics.set_gauge("orchestrator_active_workers", float(active_workers))
+        
+        try:
+            queue_stats = self.queue.get_queue_size()
+            for stat_name, value in queue_stats.items():
+                metrics.set_gauge(f"queue_size_{stat_name}", float(value))
+        except Exception as e:
+            self.logger.error("Failed to get queue stats", error=str(e))
     
     def start(self) -> None:
-        """
-        Start the orchestrator and all worker processes.
-        
-        Initializes all configured worker processes and begins the monitoring
-        loop for fault tolerance and automatic recovery.
-        
-        Raises:
-            RuntimeError: If orchestrator is already running
-        """
+        """Start the orchestrator and all worker processes."""
         if self.running:
             raise RuntimeError("Orchestrator is already running")
         
         self.running = True
-        LOGGER.info(f"Starting orchestrator with {self.worker_count} workers")
+        
+        self.logger.info("Starting orchestrator", 
+                        worker_count=self.config.worker.count,
+                        config=self.config.to_dict())
+        
+        metrics.increment_counter("orchestrator_starts")
         
         # Start all worker processes
-        for worker_id in range(self.worker_count):
+        for worker_id in range(self.config.worker.count):
             self._start_worker(worker_id)
         
         # Main monitoring loop
@@ -216,29 +220,20 @@ class TaskOrchestrator:
                 time.sleep(1)  # Check every second
                 
         except KeyboardInterrupt:
-            LOGGER.info("Received interrupt signal")
+            self.logger.info("Received interrupt signal")
         finally:
             self._shutdown()
     
     def _shutdown_handler(self, signum: int, frame) -> None:
-        """
-        Handle shutdown signals for graceful orchestrator termination.
-        
-        Args:
-            signum (int): Signal number received
-            frame: Current stack frame
-        """
-        LOGGER.info(f"Received shutdown signal {signum}")
+        """Handle shutdown signals for graceful orchestrator termination."""
+        self.logger.info("Received shutdown signal", signal=signum)
         self.running = False
     
     def _shutdown(self) -> None:
-        """
-        Perform graceful shutdown of all worker processes.
+        """Perform graceful shutdown of all worker processes."""
+        self.logger.info("Shutting down orchestrator")
         
-        Terminates all active worker processes with timeout-based cleanup
-        to ensure proper resource deallocation.
-        """
-        LOGGER.info("Shutting down orchestrator")
+        metrics.increment_counter("orchestrator_shutdowns")
         
         # Signal all workers to stop
         for worker in self.workers.values():
@@ -246,36 +241,27 @@ class TaskOrchestrator:
                 worker.status = ProcessStatus.STOPPING
                 worker.process.terminate()
         
-        # Wait for graceful shutdown with timeout
+        # Wait for graceful shutdown with timeout from config
+        shutdown_timeout = getattr(self.config.worker, 'shutdown_timeout', 10)
         for worker in self.workers.values():
             if worker.process:
-                worker.process.join(timeout=10)
+                worker.process.join(timeout=shutdown_timeout)
                 if worker.process.is_alive():
-                    LOGGER.warning(f"Force killing worker {worker.id}")
+                    self.logger.warning("Force killing worker", worker_id=worker.worker_id)
                     worker.process.kill()
                     worker.process.join()
         
-        LOGGER.info("All workers stopped")
+        self.logger.info("All workers stopped")
     
     def get_worker_status(self) -> dict[int, str]:
-        """
-        Retrieve current status of all managed worker processes.
-        
-        Returns:
-            dict[int, str]: Mapping of worker IDs to their current status
-        """
+        """Retrieve current status of all managed worker processes."""
         return {
             worker_id: worker.status.value 
             for worker_id, worker in self.workers.items()
         }
     
-    def get_stats(self) -> dict[str, int]:
-        """
-        Generate orchestrator statistics for monitoring and debugging.
-        
-        Returns:
-            dict[str, int]: Statistical information about worker states
-        """
+    def get_stats(self) -> dict[str, any]:
+        """Generate orchestrator statistics for monitoring and debugging."""
         status_counts = {}
         for status in ProcessStatus:
             status_counts[status.value] = sum(
@@ -283,8 +269,49 @@ class TaskOrchestrator:
                 if w.status == status
             )
         
-        return {
+        base_stats = {
             "total_workers": len(self.workers),
             "registered_tasks": len(self.registry.list_tasks()),
-            **status_counts
+            "config": {
+                "environment": self.config.environment,
+                "worker_count": self.config.worker.count,
+                "max_retries": self.config.worker.max_retries,
+            },
+            "worker_status_counts": status_counts,
+            "worker_details": {
+                worker.worker_id: {
+                    "status": worker.status.value,
+                    "restart_count": worker.restart_count,
+                    "pid": worker.process.pid if worker.process else None
+                }
+                for worker in self.workers.values()
+            }
+        }
+        
+        global_stats = metrics.get_stats()
+        base_stats.update(global_stats)
+        
+        return base_stats
+    
+    def healthcheck(self) -> dict[str, any]:
+        """Perform health check and return status."""
+        stats = self.get_stats()
+        
+        healthy_workers = stats["worker_status_counts"].get("running", 0)
+        total_workers = stats["total_workers"]
+        
+        # Consider healthy if at least 50% of workers are running
+        health_threshold = max(1, total_workers // 2)
+        is_healthy = healthy_workers >= health_threshold
+        
+        return {
+            "healthy": is_healthy,
+            "status": "healthy" if is_healthy else "degraded",
+            "workers": {
+                "healthy": healthy_workers,
+                "total": total_workers,
+                "threshold": health_threshold
+            },
+            "uptime": time.time() - getattr(self, '_start_time', time.time()),
+            "queue_size": stats.get("gauges", {}).get("queue_size_total", 0)
         }

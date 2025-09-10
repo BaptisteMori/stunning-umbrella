@@ -2,8 +2,8 @@ from enum import Enum
 import logging
 import signal
 
-from core.registry import TaskRegistry
-from queue.queue import TaskQueue
+from task_framework.core.registry import TaskRegistry
+from task_framework.queue.queue import Queue
 
 
 LOGGER: logging.Logger = logging.getLogger(__name__)
@@ -19,8 +19,8 @@ class WorkerStatus(Enum):
 
 
 class Worker:
-    def __init__(self, queue: TaskQueue, registry: TaskRegistry):
-        self.queue: TaskQueue = queue
+    def __init__(self, queue: Queue, registry: TaskRegistry):
+        self.queue: Queue = queue
         self.registry: TaskRegistry = registry
 
         self.running: bool = True

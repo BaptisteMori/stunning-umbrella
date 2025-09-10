@@ -1,11 +1,20 @@
 import json
-import uuid
+from typing import Optional, Dict, Any
 from dataclasses import dataclass, asdict
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 @dataclass
-class TaskMessage:
+class Message:
+    task_id: str
+    task_name: str
+    status: str
+    retry_count: int = 0
+    priority: int = 0
+
+
+@dataclass
+class TaskMessage(Message):
     """
     A standardized message container for task execution with built-in metadata and serialization.
     
@@ -29,14 +38,12 @@ class TaskMessage:
         ... )
         >>> task.id  # Auto-generated UUID
         '550e8400-e29b-41d4-a716-446655440000'
-   """
-    task_name: str
-    params: dict[str, any]
-    id: str = None
-    priority: int = 0
-    retry_count: int = 0
+   """    
+    params: Dict[str, Any] = None
     max_retries: int = 3
-    created_at: str = None
+    timeout: int = 300
+    created_at: Optional[str] = None
+    queue_name: str = "default"
     
     def __post_init__(self):
         """
@@ -45,10 +52,8 @@ class TaskMessage:
         Generates unique ID and creation timestamp if not explicitly provided,
         ensuring each task message has proper identification and tracking metadata.
         """
-        if self.id is None:
-            self.id = str(uuid.uuid4())
         if self.created_at is None:
-            self.created_at = datetime.utcnow().isoformat()
+            self.created_at = datetime.now(timezone.utc).isoformat()
     
     def to_json(self) -> str:
         """
@@ -94,3 +99,29 @@ class TaskMessage:
         """
         data = json.loads(json_str)
         return cls(**data)
+
+
+@dataclass
+class ResultMessage(Message):
+    """Result of the execution of a task"""
+    result: Optional[Any] = None
+    error: Optional[str] = None
+    traceback: Optional[str] = None
+    started_at: Optional[str] = None
+    completed_at: Optional[str] = None
+    execution_time: Optional[float] = None
+    worker_id: Optional[str] = None
+    
+    def to_json(self) -> str:
+        data = asdict(self)
+        # Serialize if needed
+        if self.result is not None:
+            try:
+                json.dumps(self.result)  # Test if serializable  
+            except (TypeError, ValueError):
+                data['result'] = str(self.result)
+        return json.dumps(data)
+    
+    @classmethod
+    def from_json(cls, json_str: str) -> 'ResultMessage':
+        return cls(**json.loads(json_str))

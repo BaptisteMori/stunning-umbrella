@@ -3,8 +3,8 @@ import inspect
 import logging
 from pathlib import Path
 
-from core.task import Task
-from utils.string_parsing import string_matches_any_pattern
+from task_framework.core.task import Task
+from task_framework.utils.string_parsing import string_matches_any_pattern
 
 
 LOGGER: logging.Logger = logging.getLogger(__name__)
@@ -63,7 +63,7 @@ class TaskRegistry:
         return self.tasks.copy()
     
 
-def discover_tasks(tasks_path: str|Path, except_patterns: list[str] = [r"__.*", r"base.py"]) -> dict[str, Task]:
+def discover_tasks(tasks_path: Path, except_patterns: list[str] = [r"__.*", r"base.py"]) -> dict[str, Task]:
     """
     Automatically discover and load task classes from a specified directory.
     

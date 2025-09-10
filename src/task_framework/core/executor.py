@@ -1,4 +1,4 @@
-from core.registry import TaskRegistry
+from task_framework.core.registry import TaskRegistry
 
 
 class TaskExecutor:
@@ -13,7 +13,7 @@ class TaskExecutor:
     def __init__(self, registry: TaskRegistry):
         self.registry = registry
     
-    def execute_task(self, task_name: str, params: dict[str, any]|None = None):
+    def execute_task(self, task_name: str, params: dict[str, any] = None):
         """
         Execute a registered task by name with optional parameters.
         

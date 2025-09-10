@@ -1,0 +1,4 @@
+
+
+class TaskQueueNotSet(Exception):
+    pass

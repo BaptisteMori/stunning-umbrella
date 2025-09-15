@@ -12,6 +12,15 @@ class Message:
     retry_count: int = 0
     priority: int = 0
 
+    @classmethod
+    def from_message(cls, message: 'Message'):
+        cls(
+            task_id=message.task_id,
+            task_name=message.task_name,
+            status=message.status,
+            retry_count=message.retry_count,
+            priority=message.priority
+        )
 
 @dataclass
 class TaskMessage(Message):

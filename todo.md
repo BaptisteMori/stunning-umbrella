@@ -1,13 +1,15 @@
-- [ ] permettre un retour de résultats
+- [x] permettre un retour de résultats
 - [ ] voir comment le status peut être updater
     - quand le worker prend le message il le pop alors il est pas possible d'updater le status, 
-- [ ] refaire le système de logging
+- [x] refaire le système de logging
 - [ ] revoir la config 
 - [ ] modifier metric pour le rendre plus propre
 - [ ] compléter le Pipfile, setup
 - [ ] faire la doc, readme
     - faire les cycles de vie d'un worker, orchestrateur, message
+    - docstring
 - [ ] implémenter un système de worflows, plusieurs taches à la suite faite sur un même worker
+- [ ] supprimer TaskParams pour faire une validation directement via les params fournis dans le init
 
 - [ ] dump des schema des models en utilisant pydantic
     - https://docs.pydantic.dev/latest/concepts/serialization/

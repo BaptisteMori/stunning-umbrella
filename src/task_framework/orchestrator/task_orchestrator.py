@@ -10,8 +10,7 @@ from task_framework.core.registry import TaskRegistry
 from task_framework.workers.worker import Worker
 from task_framework.workers.task_worker import TaskWorker
 from task_framework.config.settings import TaskFrameworkConfig
-from task_framework.observability.metrics import metrics, StructuredLogger
-
+from task_framework.monitoring.metrics import MetricsConnector, MetricType
 
 class ProcessStatus(Enum):
     """Process execution states for worker management."""

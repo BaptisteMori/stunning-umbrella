@@ -35,5 +35,15 @@ class TaskExecutor:
                 the provided parameters.
         """
         task_class = self.registry.get_task(task_name)
-        task_instance = task_class(params)
-        return task_instance.run()
+        print("params", params)
+        task_instance = task_class(**params)
+
+        task_instance.before_run()
+        try:
+            result = task_instance.before_run()
+        except Exception as e:
+            task_instance.on_failure()
+            raise
+        task_instance.on_success()
+
+        return result

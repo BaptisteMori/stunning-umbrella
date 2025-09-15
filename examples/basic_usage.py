@@ -12,11 +12,11 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 
 # Imports de votre librairie
 from task_framework.core.registry import TaskRegistry
-from task_framework.queue.queue_type.redis_queue import RedisTaskQueue
+from task_framework.queue.queue_connectors.redis_queue import RedisTaskQueue
 from task_framework.core.priorities import TaskPriority
 from task_framework.workers.task_worker import TaskWorker
 from task_framework.core.decorator import create_task_decorator
-from task_framework.core.task import Task, TaskParams
+from task_framework.core.task import Task, TaskParams, TaskStatus
 from task_framework.config.settings import TaskFrameworkConfig
 from task_framework.core.message import TaskMessage
 
@@ -46,13 +46,19 @@ def test_basic_functionality():
 
     print(f"subclass : {issubclass(SendEmailTask, Task)}")
     # Enregistrer la tâche
-    registry.register("send_email", SendEmailTask)
+    registry.register("SendEmailTask", SendEmailTask)
     
     # Enqueue une tâche
-    task_id = queue.enqueue("send_email", {
-        "recipient": "test@example.com",
-        "subject": "Hello World"
-    }, priority=TaskPriority.NORMAL)
+    send_mail_msg = TaskMessage(
+        "test_send_mail",
+        "SendEmailTask",
+        TaskStatus.PENDING.value,
+        params={
+            "recipient": "test@example.com",
+            "subject": "Hello World"
+        }
+    )
+    task_id = queue.enqueue(send_mail_msg)
     
     print(f"✅ Task enqueued: {task_id}")
     
@@ -295,7 +301,7 @@ def check_redis_connection():
     test_message = TaskMessage(
         task_id="test",
         task_name="testTask",
-        status="PENDING",
+        status=TaskStatus.PENDING.value,
         params={"data": "ping"}
     )
 

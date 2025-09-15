@@ -1,6 +1,7 @@
 import time
 import redis
 import logging
+from enum import Enum
 
 from task_framework.core.priorities import TaskPriority
 from task_framework.core.message import Message, TaskMessage, ResultMessage 
@@ -10,18 +11,36 @@ from task_framework.queue.queue import Queue
 LOGGER = logging.getLogger(__name__)
 
 
+# class RedisStructureType(Enum):
+
+
+
 class RedisTaskQueue(Queue):
     """
-    Redis-based task queue implementation providing priority-based task management.
+    Redis implementation of generic queue interface.
     
-    This class implements a task queue using Redis as the backend storage, supporting
-    priority-based task queues with blocking operations for efficient task processing.
+    This implementation uses Redis lists for task queues (with priority)
+    and Redis hashes for persistent storage (results, DLQ, etc).
+    
+    Attributes:
+        client: Redis client instance.
+        queue_prefix: Prefix for all Redis keys.
     """
     
     def __init__(self, redis_url: str = "redis://localhost:6379", 
-                 queue_name: str = "tasks", 
+                 queue_name: str = "default", 
                  max_retries: int = 3,
-                 priorities: type[TaskPriority] = TaskPriority):
+                 priorities: type[TaskPriority] = TaskPriority,
+                 structure: str = "fifo"
+                 ):
+        """
+        Initialize Redis queue.
+        
+        Args:
+            redis_url: Redis connection URL.
+            queue_name: Prefix for Redis keys to avoid collisions.
+            max_retries: Number of retries before abandon
+        """
         super().__init__(queue_name, priorities=priorities)
         self.redis_url: str = redis_url
         self.max_retries: int = max_retries
@@ -50,59 +69,74 @@ class RedisTaskQueue(Queue):
                     raise ConnectionError(f"Failed to connect to Redis after {self.max_retries} attempts: {e}")
     
     def _get_queue_key(self, priority: int) -> str:
-        """Generate Redis key for a specific priority queue."""
+        """
+        Generate Redis key for a queue.
+        
+        Args:
+            priority: Optional priority level for task queues.
+            
+        Returns:
+            str: Redis key for the queue.
+        """
         return f"{self.queue_name}:priority:{priority}"
 
     def enqueue(self, message: Message) -> str:
         """
-        Add a task to the appropriate priority queue.
+        Add a message to the specified queue.
+        
+        For task-like queues (with priority), uses Redis lists.
+        For result-like queues, uses Redis hashes.
         
         Args:
-            message (Message): the message to enqueue
+            message: Message to enqueue.
+            
         Returns:
-            str: Unique identifier for the enqueued task message
+            str: Message ID.
+            
+        Raises:
+            redis.RedisError: If Redis operation fails.
         """
-        if type(message) is TaskMessage:
-            queue_key = self._get_queue_key(message.priority)
+        queue_key = self._get_queue_key(message.priority)
+        if type(message) is ResultMessage:
+            self.redis_client.hset(queue_key, message.to_json())
+            LOGGER.debug(f"Enqueued in hset result {message.task_name} with priority {message.priority} (ID: {message.task_id})")
+            return message.task_id
         
-            try:
-                self.redis_client.lpush(queue_key, message.to_json())
-                LOGGER.debug(f"Enqueued task {message.task_name} with priority {message.priority} (ID: {message.task_id})")
-                return message.task_id
-            except redis.RedisError as e:
-                LOGGER.error(f"Failed to enqueue task {message.task_name}: {e}")
-                raise
-        elif type(message) is ResultMessage:
-            pass
+        self.redis_client.lpush(queue_key, message.to_json())
+        LOGGER.debug(f"Enqueued in fifo task {message.task_name} with priority {message.priority} (ID: {message.task_id})")
+        return message.task_id
     
     def dequeue(self, timeout: int = 1) -> TaskMessage:
         """
-        Retrieve and remove a task from the queue with priority handling.
+        Remove and return next message from queue.
         
-        This method implements priority-based dequeuing by checking all priority queues
-        in order from highest to lowest priority. Uses blocking operations (BRPOP) 
-        for efficient waiting.
+        Only works for list-based queues (tasks, retry).
+        Checks priorities from high to low.
         
         Args:
-            timeout (int, optional): Maximum time to wait for a task in seconds. Defaults to 1.
-        
-        Returns:
-            TaskMessage|None: The next available task message, or None if timeout expires
-        """
-        queue_keys = [self._get_queue_key(p.value) for p in self._get_sorted_priorities()]
-        
-        try:
-            result = self.redis_client.brpop(queue_keys, timeout=timeout)
+            timeout: Seconds to wait for message.
             
-            if result:
-                queue_key, message_json = result
-                message = TaskMessage.from_json(message_json)
-                LOGGER.debug(f"Dequeued task {message.task_name} from {queue_key} (ID: {message.task_id})")
-                return message
-                
-        except redis.RedisError as e:
-            LOGGER.error(f"Failed to dequeue task: {e}")
-            raise
+        Returns:
+            Optional[Message]: Message or None if timeout/empty.
+        """
+        # queue_keys = [self._get_queue_key(p.value) for p in self._get_sorted_priorities()]
+        
+        queue_keys = []
+        for priority in range(100, -1, -1):
+            key = self._get_queue_key(priority)
+            if self.redis_client.exists(key):
+                queue_keys.append(key)
+        
+        if not queue_keys:
+            return None
+        
+        result = self.redis_client.brpop(queue_keys, timeout=timeout)
+        
+        if result:
+            queue_key, message_json = result
+            message: TaskMessage = TaskMessage.from_json(message_json)
+            LOGGER.debug(f"Dequeued task {message.task_name} from {queue_key} (ID: {message.task_id})")
+            return message
             
         return None
     

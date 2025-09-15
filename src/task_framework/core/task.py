@@ -8,7 +8,6 @@ from datetime import datetime, timezone
 
 from task_framework.core.exception import TaskQueueNotSet
 from task_framework.core.message import TaskMessage
-from task_framework.core.priorities import TaskPriority
 if TYPE_CHECKING:
     from task_framework.queue.queue import Queue
     from task_framework.core.registry import TaskRegistry
@@ -60,14 +59,15 @@ class Task(ABC):
     # Validation model, to be overridden
     params_model: type[TaskParams] = None
     
+    _task_name: str = None
     _queue_name: str = "default"
     _priority: int = 50
     _max_retries: int = 3
     _retry_delay: int = 60
     _timeout: int = 300
-    _queue: type["Queue"] = None
+    _task_queue: type["Queue"] = None
     _registry: type["TaskRegistry"] = None
-    _result_backend = None
+    _result_queue = None
 
     _exclude_params: list[str] = [
         "priority", "task_name", "max_retries", "timeout"
@@ -115,6 +115,15 @@ class Task(ABC):
             This is an abstract method that must be overridden in subclasses
         """
         pass
+
+    def before_run(self):
+        pass
+
+    def on_failure(self):
+        pass
+
+    def on_success(self):
+        pass
     
     def execute(self):
         """
@@ -147,7 +156,7 @@ class Task(ABC):
             task = MyTask(param1="value1")
             task_id = task.enqueue(priority=10)
         """
-        if not self._queue:
+        if not self._task_queue:
             raise TaskQueueNotSet("Queue not configured. Use TaskFramework.setup()")
         
         message = TaskMessage(
@@ -157,15 +166,16 @@ class Task(ABC):
             priority=priority if priority else self._priority,
             retry_count=self._retry_count,
             max_retries=self._max_retries,
-            timeout=self._timeout
+            timeout=self._timeout,
+            status=TaskStatus.PENDING.value
         )
         
         self._sended_at = datetime.now(timezone.utc)
-        self._queue.enqueue(message)
+        self._task_queue.enqueue(message)
             
         # Save the initial status
-        if self._result_backend:
-            self._result_backend.set_status(
+        if self._result_queue:
+            self._result_queue.set_status(
                 self._task_id, TaskStatus.PENDING
             )
             
@@ -175,8 +185,8 @@ class Task(ABC):
         """Cancel the task if it's not already executed"""
         if self.status in [TaskStatus.PENDING, TaskStatus.RETRY]:
             self.status = TaskStatus.CANCELLED
-            if self._result_backend:
-                self._result_backend.set_status(
+            if self._result_queue:
+                self._result_queue.set_status(
                     self._task_id, TaskStatus.CANCELLED
                 )
             return True
@@ -184,7 +194,9 @@ class Task(ABC):
 
     @classmethod
     def get_name(cls) -> str:
-        return cls._task_name or cls.__name__
+        if not cls._task_name:
+            return cls.__name__
+        return cls._task_name
 
     def get_required_params(self) -> list[str]:
         """

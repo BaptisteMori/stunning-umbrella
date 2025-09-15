@@ -4,6 +4,7 @@ import signal
 
 from task_framework.core.registry import TaskRegistry
 from task_framework.queue.queue import Queue
+from task_framework.monitoring.metrics import MetricsConnector
 
 
 LOGGER: logging.Logger = logging.getLogger(__name__)
@@ -19,16 +20,25 @@ class WorkerStatus(Enum):
 
 
 class Worker:
-    def __init__(self, queue: Queue, registry: TaskRegistry):
-        self.queue: Queue = queue
+    def __init__(
+            self, 
+            task_queue: Queue, 
+            result_queue: Queue, 
+            registry: TaskRegistry, 
+            metric: MetricsConnector
+        ):
+
+        self.task_queue: Queue = task_queue
+        self.result_queue: Queue = result_queue
         self.registry: TaskRegistry = registry
+        self.metric: MetricsConnector = metric
 
         self.running: bool = True
         self.status: WorkerStatus = WorkerStatus.IDLE
 
         # Graceful management of the stop
         signal.signal(signal.SIGINT, self._shutdown)
-        signal.signal(signal.SIGTERM, self._shutdown)   
+        signal.signal(signal.SIGTERM, self._shutdown)
     
     def _shutdown(self, signum, frame):
         """Handles the shutdown signal, gracefully stopping the worker.

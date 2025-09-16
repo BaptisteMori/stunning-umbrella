@@ -7,7 +7,7 @@ import uuid
 from datetime import datetime, timezone
 
 from task_framework.core.exception import TaskQueueNotSet
-from task_framework.core.message import TaskMessage
+from task_framework.core.message import TaskMessage, ResultMessage
 if TYPE_CHECKING:
     from task_framework.queue.queue import Queue
     from task_framework.core.registry import TaskRegistry
@@ -67,7 +67,7 @@ class Task(ABC):
     _timeout: int = 300
     _task_queue: type["Queue"] = None
     _registry: type["TaskRegistry"] = None
-    _result_queue = None
+    _result_queue: type["Queue"] = None
 
     _exclude_params: list[str] = [
         "priority", "task_name", "max_retries", "timeout"
@@ -175,8 +175,9 @@ class Task(ABC):
             
         # Save the initial status
         if self._result_queue:
-            self._result_queue.set_status(
-                self._task_id, TaskStatus.PENDING
+            # TODO : create a result_message
+            self._result_queue.update_status(
+                self._task_id, TaskStatus.PENDING, ResultMessage
             )
             
         return self._task_id

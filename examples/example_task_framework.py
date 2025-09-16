@@ -6,20 +6,32 @@ import time
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 
 
-from task_framework.queue.queue_connectors.redis_queue import RedisTaskQueue
+from task_framework.core.message import TaskMessage, ResultMessage
+from task_framework.queue.queue_connectors.redis_queue import RedisTaskQueue, RedisStructure
 from task_framework import TaskFramework
+
 
 from typing import List, Dict
 import time
 
-queue: RedisTaskQueue = RedisTaskQueue(
+task_queue: RedisTaskQueue = RedisTaskQueue(
     "redis://localhost:6379",
-    "default"
+    "task",
+    queue_structure=RedisStructure.FIFO,
+    default_message_type=TaskMessage
 )
+
+result_queue: RedisTaskQueue = RedisTaskQueue(
+    "redis://localhost:6379",
+    "result",
+    queue_structure=RedisStructure.HSET,
+    default_message_type=ResultMessage
+)
+
 # Configuration
 framework = TaskFramework.setup(
-    task_queue=queue, 
-    result_queue=queue
+    task_queue=task_queue, 
+    result_queue=result_queue
 )
 
 # 1. Fonction simple

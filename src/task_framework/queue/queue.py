@@ -4,6 +4,7 @@ from enum import Enum
 
 from task_framework.core.message import Message
 from task_framework.core.priorities import TaskPriority
+from task_framework.core.task import TaskStatus
 
 
 class QueueType(Enum):
@@ -154,16 +155,6 @@ class Queue:
         pass
 
     @abstractmethod
-    def ack(self, message_id: str) -> bool:
-        """Acknowledge a message ( for the queue that support it )."""
-        pass
-    
-    @abstractmethod
-    def nack(self, message_id: str, requeue: bool = True) -> bool:
-        """Negative acknowledge."""
-        pass
-
-    @abstractmethod
     def get_queue_size(self, queue_name: Optional[str] = None) -> Dict[str, int]:
         """
         Get statistics for queue(s).
@@ -177,11 +168,11 @@ class Queue:
         pass
 
     @abstractmethod
-    def delete(self, message_id: str) -> bool:
-        """Delete a message in the queue"""
+    def get_status(self, message_id: str) -> bool:
+        """Get the status of a message"""
         pass
 
     @abstractmethod
-    def get_status(self, message_id: str) -> bool:
-        """Get the status of a message"""
+    def update_status(self, message_id: str, status: TaskStatus) -> bool:
+        """Update the status of a message"""
         pass

@@ -24,7 +24,34 @@ pip install -e .
 [packages]
 task-framework = {git = "https://github.com/{org}/task-framework.git", ref = "v1.2.0"}
 ```
+## Structure
 
+### Overall
+
+```mermaid
+graph TD
+    A[Task.enqueue] --> B[TaskMessage in queue]
+    B --> C[ResultMessage create with status=PENDING]
+    
+    D[Worker.dequeue] --> E[TaskMessage take out]
+    E --> F[ResultMessage update: status=RUNNING]
+    
+    F --> G{Execution}
+    G -->|Success| H[ResultMessage update: status=COMPLETED + result]
+    G -->|Failure + Retry| I[ResultMessage update: status=RETRY]
+    G -->|Failure Final| J[ResultMessage update: status=FAILED + error]
+    
+    I --> K[TaskMessage re-enqueue]
+    K --> D
+
+    L[Task.get_result] --> M{Check result messages}
+    
+    
+    M -->|completed/failed/skipped/cancelled| N[ResultMessage reteived]
+    M -->|retry/running/pending| O[ResultMessage Not completed]
+    O -->|delay| M
+    M -->|no status| P[ResultMessage does not exist]
+```
 
 ## Usage
 

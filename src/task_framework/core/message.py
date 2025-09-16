@@ -11,6 +11,11 @@ class Message:
     status: str
     retry_count: int = 0
     priority: int = 0
+    created_at: Optional[str] = None
+    started_at: Optional[str] = None
+    updated_at: Optional[str] = None
+    completed_at: Optional[str] = None
+    execution_time: Optional[float] = None
 
     @classmethod
     def from_message(cls, message: 'Message'):
@@ -21,6 +26,52 @@ class Message:
             retry_count=message.retry_count,
             priority=message.priority
         )
+    
+    @classmethod
+    def from_json(cls, json_str: str) -> 'Message':
+        """
+        Deserialize a JSON string to create a Message instance.
+        
+        Reconstructs a Message object from its JSON representation,
+        enabling message queue consumption and data persistence retrieval.
+        
+        Args:
+            json_str (str): Valid JSON string containing task message data
+            
+        Returns:
+            Message: Reconstructed task message instance
+            
+        Raises:
+            json.JSONDecodeError: If the input string is not valid JSON
+            TypeError: If required fields are missing from the JSON data
+            
+        Example:
+            >>> json_data = '{"task_name": "process_data", "params": {"file": "test.csv"}}'
+            >>> message = Message.from_json(json_data)
+            >>> message.task_name
+            'process_data'
+        """
+        data = json.loads(json_str)
+        return cls(**data)
+
+    def to_json(self) -> str:
+        """
+        Serialize the task message to JSON string format.
+        
+        Converts the dataclass instance to a JSON representation suitable for
+        message queue transmission or persistent storage.
+        
+        Returns:
+            str: JSON string representation of the task message
+            
+        Example:
+            >>> task = Message("process_data", {"file": "test.csv"})
+            >>> json_str = task.to_json()
+            >>> print(json_str)
+            '{"task_name": "process_data", "params": {"file": "test.csv"}, ...}'
+        """
+        return json.dumps(asdict(self))
+
 
 @dataclass
 class TaskMessage(Message):
@@ -51,7 +102,6 @@ class TaskMessage(Message):
     params: Dict[str, Any] = None
     max_retries: int = 3
     timeout: int = 300
-    created_at: Optional[str] = None
     queue_name: str = "default"
     
     def __post_init__(self):
@@ -63,52 +113,6 @@ class TaskMessage(Message):
         """
         if self.created_at is None:
             self.created_at = datetime.now(timezone.utc).isoformat()
-    
-    def to_json(self) -> str:
-        """
-        Serialize the task message to JSON string format.
-        
-        Converts the dataclass instance to a JSON representation suitable for
-        message queue transmission or persistent storage.
-        
-        Returns:
-            str: JSON string representation of the task message
-            
-        Example:
-            >>> task = TaskMessage("process_data", {"file": "test.csv"})
-            >>> json_str = task.to_json()
-            >>> print(json_str)
-            '{"task_name": "process_data", "params": {"file": "test.csv"}, ...}'
-        """
-        return json.dumps(asdict(self))
-    
-    @classmethod
-    def from_json(cls, json_str: str) -> 'TaskMessage':
-        """
-        Deserialize a JSON string to create a TaskMessage instance.
-        
-        Reconstructs a TaskMessage object from its JSON representation,
-        enabling message queue consumption and data persistence retrieval.
-        
-        Args:
-            json_str (str): Valid JSON string containing task message data
-            
-        Returns:
-            TaskMessage: Reconstructed task message instance
-            
-        Raises:
-            json.JSONDecodeError: If the input string is not valid JSON
-            TypeError: If required fields are missing from the JSON data
-            
-        Example:
-            >>> json_data = '{"task_name": "process_data", "params": {"file": "test.csv"}}'
-            >>> task = TaskMessage.from_json(json_data)
-            >>> task.task_name
-            'process_data'
-        """
-        data = json.loads(json_str)
-        return cls(**data)
-
 
 @dataclass
 class ResultMessage(Message):
@@ -116,9 +120,6 @@ class ResultMessage(Message):
     result: Optional[Any] = None
     error: Optional[str] = None
     traceback: Optional[str] = None
-    started_at: Optional[str] = None
-    completed_at: Optional[str] = None
-    execution_time: Optional[float] = None
     worker_id: Optional[str] = None
     
     def to_json(self) -> str:
@@ -130,7 +131,3 @@ class ResultMessage(Message):
             except (TypeError, ValueError):
                 data['result'] = str(self.result)
         return json.dumps(data)
-    
-    @classmethod
-    def from_json(cls, json_str: str) -> 'ResultMessage':
-        return cls(**json.loads(json_str))

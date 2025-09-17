@@ -80,7 +80,7 @@ class Task(ABC):
         self._validate_params()
         
         self._task_name: str = self.get_name()
-        self._task_id: str = f"{self._task_name}_{str(uuid.uuid4)}"
+        self._task_id: str = f"{self._task_name}_{str(uuid.uuid4())}"
         self._retry_count: int = 0
 
         self._created_at: datetime = datetime.now(timezone.utc)
@@ -175,10 +175,16 @@ class Task(ABC):
             
         # Save the initial status
         if self._result_queue:
-            # TODO : create a result_message
-            self._result_queue.update_status(
-                self._task_id, TaskStatus.PENDING, ResultMessage
+            result_message: ResultMessage = ResultMessage(
+                task_id=self._task_id,
+                task_name=self._task_name,
+                priority=self._priority,
+                status=TaskStatus.PENDING.value,
+                created_at=self._created_at.isoformat(),
+                updated_at=self._created_at.isoformat()
             )
+
+            self._result_queue.enqueue(result_message)
             
         return self._task_id
 

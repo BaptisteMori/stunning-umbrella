@@ -1,6 +1,6 @@
 # Task framework
 
-All it does is take a task and process it
+All it does is create a task, put it in a queue and something will process it.
 
 
 ## Description
@@ -32,7 +32,8 @@ task-framework = {git = "https://github.com/{org}/task-framework.git", ref = "v1
 graph TD
     A[Task.enqueue] --> B[TaskMessage in queue]
     B --> C[ResultMessage create with status=PENDING]
-    
+    B --> Q[TaskMessage create with status=PENDING]
+
     D[Worker.dequeue] --> E[TaskMessage take out]
     E --> F[ResultMessage update: status=RUNNING]
     
@@ -41,13 +42,11 @@ graph TD
     G -->|Failure + Retry| I[ResultMessage update: status=RETRY]
     G -->|Failure Final| J[ResultMessage update: status=FAILED + error]
     
-    I --> K[TaskMessage re-enqueue]
-    K --> D
+    I -->|Attempt + 1| K[TaskMessage re-enqueue]
 
     L[Task.get_result] --> M{Check result messages}
     
-    
-    M -->|completed/failed/skipped/cancelled| N[ResultMessage reteived]
+    M -->|completed/failed/skipped/cancelled| N[ResultMessage retrieved]
     M -->|retry/running/pending| O[ResultMessage Not completed]
     O -->|delay| M
     M -->|no status| P[ResultMessage does not exist]

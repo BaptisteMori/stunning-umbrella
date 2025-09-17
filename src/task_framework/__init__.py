@@ -2,11 +2,12 @@ import inspect
 from typing import Optional, Type, Callable, Union
 from functools import wraps
 
+from task_framework.core.message import ResultMessage
 from task_framework.core.task import Task, TaskStatus
 from task_framework.core.registry import TaskRegistry
 from task_framework.queue.queue import Queue
 from task_framework.monitoring.metrics import MetricsConnector, NoOpMetricsConnector
-from task_framework.workers.worker import Worker
+from task_framework.workers.task_worker import TaskWorker
 # from task_framework.worker.orchestrator import Orchestrator
 
 class TaskFramework:
@@ -153,12 +154,12 @@ class TaskFramework:
                                queue_name: str):
         """Convertit une fonction en Task et l'enregistre."""
         task_name = name or func.__name__
-        
         # Créer une classe Task dynamiquement pour cette fonction
         class FunctionTask(Task):
             """Wrapper Task pour une fonction."""
             
             # Configuration de la tâche
+            _task_name = task_name
             _priority = priority
             _max_retries = max_retries
             _timeout = timeout
@@ -174,7 +175,7 @@ class TaskFramework:
                 # Appeler la fonction avec les bons arguments
                 return func(**bound_args)
             
-            def _bind_params_to_function(self, sig: inspect.Signature) -> dict:
+            def _bind_params_to_function(self, sig: inspect.Signature) -> ict:
                 """Mappe self.params aux arguments de la fonction."""
                 bound_args = {}
                 
@@ -276,7 +277,7 @@ class TaskFramework:
             """
             if not self.result_queue:
                 raise RuntimeError("Result backend not configured")
-            return self.result_queue.get_result(task_id, timeout)
+            return self.result_queue.get_message(task_id, ResultMessage)
         
         # Attacher les méthodes au wrapper
         wrapper.delay = delay
@@ -296,13 +297,13 @@ class TaskFramework:
         
         return wrapper
 
-    def create_worker(self) -> Worker:
-        """Crée un worker configuré."""
-        return Worker(
+    def create_worker(self) -> TaskWorker:
+        """Create a configured worker."""
+        return TaskWorker(
             task_queue=self.task_queue,
             result_queue=self.result_queue,
             registry=self.registry,
-            metrics=self.metrics
+            metric=self.metrics
         )
     
     # def create_orchestrator(self, num_workers: int = 4) -> Orchestrator:

@@ -134,7 +134,7 @@ class RedisTaskQueue(Queue):
             
         return task_id
     
-    def dequeue(self, timeout: int = 1) -> Optional[Message]:
+    def dequeue(self, timeout: int = 1, message_type: Type[Message] = Message) -> Optional[Message]:
         """
         Remove and return next message from queue.
         
@@ -167,7 +167,7 @@ class RedisTaskQueue(Queue):
         
         if result:
             queue_key, message_json = result
-            message = Message.from_json(message_json)
+            message = message_type.from_json(message_json)
             
             LOGGER.debug(f"Dequeued message {message.task_id} from {queue_key}")
             

@@ -1,18 +1,19 @@
 import sys
 import os
 import time
+from typing import List, Dict
+import logging
 
-# Ajouter src/ au path pour pouvoir importer task_framework
+# add src/ to the path to be able to import task_framework
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
-
 
 from task_framework.core.message import TaskMessage, ResultMessage
 from task_framework.queue.queue_connectors.redis_queue import RedisTaskQueue, RedisStructure
 from task_framework import TaskFramework
 
+logger = logging.getLogger()
+logging.basicConfig(level=logging.INFO, stream=sys.stdout)
 
-from typing import List, Dict
-import time
 
 task_queue: RedisTaskQueue = RedisTaskQueue(
     "redis://localhost:6379",
@@ -20,13 +21,14 @@ task_queue: RedisTaskQueue = RedisTaskQueue(
     queue_structure=RedisStructure.FIFO,
     default_message_type=TaskMessage
 )
-
+task_queue.clear_queue()
 result_queue: RedisTaskQueue = RedisTaskQueue(
     "redis://localhost:6379",
     "result",
     queue_structure=RedisStructure.HSET,
     default_message_type=ResultMessage
 )
+result_queue.clear_queue()
 
 # Configuration
 framework = TaskFramework.setup(
@@ -36,7 +38,7 @@ framework = TaskFramework.setup(
 
 # 1. Fonction simple
 @framework.task()
-def send_email(recipient: str, subject: str, body: str) -> dict:
+def send_email(recipient: str, subject: str, body: str) -> Dict:
     """Envoie un email."""
     print(f"Sending email to {recipient}: {subject}")
     time.sleep(1)  # Simuler l'envoi
@@ -50,7 +52,7 @@ def send_email(recipient: str, subject: str, body: str) -> dict:
 @framework.task(priority=10, max_retries=5)
 def process_file(file_path: str, 
                  format: str = "json",
-                 compress: bool = False) -> dict:
+                 compress: bool = False) -> Dict:
     """Traite un fichier avec options."""
     print(f"Processing {file_path} as {format}")
     
@@ -67,7 +69,7 @@ def process_file(file_path: str,
 # 3. Fonction avec types complexes
 @framework.task(name="aggregate_data")
 def calculate_statistics(numbers: List[float], 
-                        options: Dict[str, any] = None) -> dict:
+                        options: Dict[str, any] = None) -> Dict:
     """Calcule des statistiques."""
     options = options or {}
     
@@ -83,13 +85,13 @@ def calculate_statistics(numbers: List[float],
         mean = result["mean"]
         variance = sum((x - mean) ** 2 for x in numbers) / len(numbers)
         result["variance"] = variance
-    
     return result
 
 # 4. Fonction avec *args et **kwargs
-@framework.task()  # Utilisation du décorateur explicite
+@framework.task(name="flexible_task")  # Utilisation du décorateur explicite
 def flexible_task(*args, **kwargs):
     """Tâche flexible qui accepte n'importe quoi."""
+    print("abcd")
     print(f"Args: {args}")
     print(f"Kwargs: {kwargs}")
     return {"args_count": len(args), "kwargs_count": len(kwargs)}
@@ -150,16 +152,17 @@ if __name__ == "__main__":
         print(f"  - {name}: {task_class.__name__}")
     
     # Stats de la queue
-    stats = framework.queue.get_stats()
+    stats = framework.task_queue.get_queue_size()
     print(f"\nQueue stats: {stats}")
     
     # === Lancer un Worker ===
     
     print("\nStarting worker...")
-    worker = framework.create_worker(worker_id="test-worker")
+    worker = framework.create_worker()
     
     # Le worker va traiter toutes les tâches enqueued
     try:
         worker.run()  # Ctrl+C pour arrêter
     except KeyboardInterrupt:
+        print(task_queue.get_queue_size())
         print("Worker stopped")

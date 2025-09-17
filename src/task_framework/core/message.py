@@ -19,7 +19,7 @@ class Message:
 
     @classmethod
     def from_message(cls, message: 'Message'):
-        cls(
+        return cls(
             task_id=message.task_id,
             task_name=message.task_name,
             status=message.status,
@@ -96,7 +96,7 @@ class TaskMessage(Message):
         ...     task_name="process_data",
         ...     params={"input_file": "data.csv", "output_format": "json"}
         ... )
-        >>> task.id  # Auto-generated UUID
+        >>> task.task_id  # Auto-generated UUID
         '550e8400-e29b-41d4-a716-446655440000'
    """    
     params: Dict[str, Any] = None

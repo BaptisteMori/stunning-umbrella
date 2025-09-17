@@ -15,8 +15,8 @@ from task_framework.core.registry import TaskRegistry
 from task_framework.queue.queue_connectors.redis_queue import RedisTaskQueue
 from task_framework.core.priorities import TaskPriority
 from task_framework.workers.task_worker import TaskWorker
-from task_framework.core.task import Task, TaskParams, TaskStatus
-from task_framework.config.settings import TaskFrameworkConfig
+from task_framework.core.task import Task, TaskParams
+from task_framework.core.task_status import TaskStatus
 from task_framework.core.message import TaskMessage
 
 

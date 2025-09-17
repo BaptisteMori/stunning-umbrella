@@ -3,7 +3,8 @@ from typing import Optional, Type, Callable, Union
 from functools import wraps
 
 from task_framework.core.message import ResultMessage
-from task_framework.core.task import Task, TaskStatus
+from task_framework.core.task_status import TaskStatus
+from task_framework.core.task import Task
 from task_framework.core.registry import TaskRegistry
 from task_framework.queue.queue import Queue
 from task_framework.monitoring.metrics import MetricsConnector, NoOpMetricsConnector
@@ -51,11 +52,26 @@ class TaskFramework:
               result_queue: Optional[Queue] = None,
               metrics: Optional[MetricsConnector] = None) -> 'TaskFramework':
         """
-        Configure le framework globalement.
+        Configure the task framework globally.
         
-        Usage:
+        Sets up the singleton instance with the provided queues and metrics
+        connector. This must be called before using the framework.
+        
+        Args:
+            task_queue: Queue for task messages. Required.
+            result_queue: Queue for result messages. Optional.
+            metrics: Metrics connector for monitoring. Defaults to NoOp.
+        
+        Returns:
+            TaskFramework: Configured framework instance.
+        
+        Raises:
+            ValueError: If task_queue is None.
+        
+        Example:
             framework = TaskFramework.setup(
-                redis_url="redis://localhost:6379"
+                task_queue=RedisTaskQueue("redis://localhost:6379", "tasks", TaskMessage),
+                result_queue=RedisTaskQueue("redis://localhost:6379", "results", ResultMessage)
             )
         """
         if not cls._instance:
@@ -175,7 +191,7 @@ class TaskFramework:
                 # Appeler la fonction avec les bons arguments
                 return func(**bound_args)
             
-            def _bind_params_to_function(self, sig: inspect.Signature) -> ict:
+            def _bind_params_to_function(self, sig: inspect.Signature) -> dict:
                 """Mappe self.params aux arguments de la fonction."""
                 bound_args = {}
                 

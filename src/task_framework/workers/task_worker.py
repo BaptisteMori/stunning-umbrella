@@ -8,8 +8,8 @@ from task_framework.workers.worker import WorkerStatus, Worker
 from task_framework.core.executor import TaskExecutor
 from task_framework.core.registry import TaskRegistry
 from task_framework.queue.queue import Queue
-from task_framework.core.task import TaskMessage, TaskStatus
-from task_framework.core.message import ResultMessage
+from task_framework.core.task_status import TaskStatus
+from task_framework.core.message import ResultMessage, TaskMessage
 from task_framework.monitoring.metrics import MetricsConnector, NoOpMetricsConnector
 
 

@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from task_framework.core.priorities import TaskPriority
 from task_framework.core.message import Message 
 from task_framework.queue.queue import Queue
-from task_framework.core.task import TaskStatus
+from task_framework.core.task_status import TaskStatus
 from task_framework.core.exception import MessageNotExist
 
 
@@ -573,19 +573,6 @@ class RedisTaskQueue(Queue):
             
         return success
 
-    def _get_sorted_priorities(self, descending: bool = True) -> list[TaskPriority]:
-        """
-        Return all TaskPriority values sorted by their numeric value.
-
-        Args:
-            descending (bool): If True, highest priority first. 
-                            If False, lowest priority first.
-
-        Returns:
-            list[TaskPriority]: Sorted list of priorities.
-        """
-        return sorted(TaskPriority, key=lambda p: p.value, reverse=descending)
-    
     def _publish_event(self, event: str, data: str) -> None:
         """
         Publish event for listeners.

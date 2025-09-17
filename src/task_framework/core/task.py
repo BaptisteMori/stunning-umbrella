@@ -7,21 +7,11 @@ import uuid
 from datetime import datetime, timezone
 
 from task_framework.core.exception import TaskQueueNotSet
+from task_framework.core.task_status import TaskStatus
 from task_framework.core.message import TaskMessage, ResultMessage
 if TYPE_CHECKING:
     from task_framework.queue.queue import Queue
     from task_framework.core.registry import TaskRegistry
-
-
-class TaskStatus(Enum):
-    NOT_CREATED = "not_created"
-    PENDING = "pending"
-    RUNNING = "running"
-    COMPLETED = "completed"
-    FAILED = "failed"
-    SKIPPED = "skipped"
-    RETRY = "retry"
-    CANCELLED = "cancelled"
 
 
 class TaskParams(BaseModel):

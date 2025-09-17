@@ -4,7 +4,7 @@ from enum import Enum
 
 from task_framework.core.message import Message
 from task_framework.core.priorities import TaskPriority
-from task_framework.core.task import TaskStatus
+from task_framework.core.task_status import TaskStatus
 
 
 class QueueType(Enum):

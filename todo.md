@@ -3,13 +3,14 @@
     - quand le worker prend le message il le pop alors il est pas possible d'updater le status, 
 - [x] refaire le système de logging
 - [x] revoir la config
+- [ ] déplacer le core.exception dans le utils
 - [ ] vérifier la cohérence du code et le nétoyer
 - [ ] faire la doc, readme
     - faire les cycles de vie d'un worker, orchestrateur, message
     - docstring
 - [ ] faire les tests unitaires et les tests de validation
 - [ ] modifier metric pour le rendre plus propre
-- [ ] compléter le Pipfile, setup
+- [ ] compléter le Pipfile, setup -> passer à pyproject.toml
 
 - [ ] implémenter un système de worflows, plusieurs taches à la suite faite sur un même worker
 - [ ] supprimer TaskParams pour faire une validation directement via les params fournis dans le init

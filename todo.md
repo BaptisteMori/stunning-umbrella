@@ -20,3 +20,5 @@
 
 - [ ] sharded queue system
 - [ ] ajouter d'autres queue type comme rabbit_mq, kafka, voir même postgres
+
+- [ ] ajouter des tests de validation

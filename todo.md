@@ -3,6 +3,8 @@
     - quand le worker prend le message il le pop alors il est pas possible d'updater le status, 
 - [x] refaire le système de logging
 - [x] revoir la config
+- [ ] ajouter un système de hook redis (BLPOP / XREAD BLOCK), pour éviter de faire contament des appel au redis
+- [ ] créé un schéma de protocol de message, pour pouvoir avoir des worker dans différent langages
 - [ ] déplacer le core.exception dans le utils
 - [ ] vérifier la cohérence du code et le nétoyer
 - [ ] faire la doc, readme
